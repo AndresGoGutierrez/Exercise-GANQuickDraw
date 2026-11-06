@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GAN con Quick, Draw! — Categoría: __CATEGORY__</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3f2ee;
+    --surface: #fcfcfb;
+    --wash: #f1f0ea;
+    --ink: #0b0b0b;
+    --ink2: #52514e;
+    --ink3: #6b6a66;
+    --line: #e3e2dc;
+    --d: #2a78d6;          /* azul: Discriminador / datos reales */
+    --g: #eb6834;          /* naranja: Generador / datos falsos */
+    --d-track: #cde2fb;
+    --pix-filter: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #121211; --surface: #1a1a19; --wash: #222221;
+      --ink: #f0efec; --ink2: #c3c2b7; --ink3: #9b9a92; --line: #2d2d2b;
+      --d: #3987e5; --g: #d95926; --d-track: #0d366b;
+      --pix-filter: invert(1);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --wash: #222221;
+    --ink: #f0efec; --ink2: #c3c2b7; --ink3: #9b9a92; --line: #2d2d2b;
+    --d: #3987e5; --g: #d95926; --d-track: #0d366b;
+    --pix-filter: invert(1);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  h1, h2, h3 { line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 1.5rem; }
+  h3 { font-size: 1.05rem; }
+  p { margin: 0 0 .75rem; }
+  a { color: inherit; }
+  code, pre { font-family: ui-monospace, "Cascadia Code", Consolas, Menlo, monospace; }
+  code { background: var(--wash); padding: .1em .35em; border-radius: 4px; font-size: .9em; }
+  :focus-visible { outline: 2px solid var(--d); outline-offset: 2px; border-radius: 4px; }
+
+  /* ---------- barra superior ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+  }
+  .topbar-in {
+    max-width: 1080px; margin: 0 auto; padding: .6rem 1.25rem;
+    display: flex; align-items: center; gap: 1rem; justify-content: space-between;
+  }
+  .brand { font-weight: 650; font-size: .95rem; white-space: nowrap; }
+  .nav { display: flex; gap: .25rem; overflow-x: auto; scrollbar-width: none; }
+  .nav a {
+    text-decoration: none; color: var(--ink2); font-size: .875rem;
+    padding: .3rem .6rem; border-radius: 999px; white-space: nowrap;
+  }
+  .nav a:hover { background: var(--wash); color: var(--ink); }
+  .btn {
+    font: inherit; font-size: .875rem; cursor: pointer; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 999px; padding: .35rem .8rem;
+  }
+  .btn:hover { background: var(--wash); }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 0 1.25rem 3rem; }
+  section { margin-top: 2.75rem; }
+  .sec-head { margin-bottom: 1rem; }
+  .sec-head p { color: var(--ink2); margin: .35rem 0 0; max-width: 70ch; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 1.25rem;
+  }
+
+  /* ---------- portada ---------- */
+  .hero { padding: 3rem 0 .5rem; }
+  .chip {
+    display: inline-flex; align-items: center; gap: .5rem; font-size: .85rem; font-weight: 600;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: .25rem .8rem; margin-bottom: 1rem;
+  }
+  .chip b { color: var(--g); font-weight: 700; }
+  .hero h1 { font-size: clamp(2rem, 5vw, 3.1rem); letter-spacing: -0.025em; max-width: 18ch; }
+  .hero .lead { color: var(--ink2); font-size: 1.1rem; max-width: 62ch; margin: 1rem 0 0; }
+  .stats {
+    display: grid; gap: .75rem; margin-top: 1.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .9rem 1rem; }
+  .tile .label { color: var(--ink2); font-size: .85rem; }
+  .tile .value { font-size: 1.7rem; font-weight: 650; letter-spacing: -0.02em; line-height: 1.25; }
+  .tile .sub { color: var(--ink3); font-size: .8rem; }
+
+  .colorkey { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; color: var(--ink2); font-size: .875rem; margin-top: 1.25rem; }
+  .colorkey span { display: inline-flex; align-items: center; gap: .45rem; }
+  .sw { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+
+  /* ---------- evolución ---------- */
+  .evo { display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+  .paper {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px; line-height: 0;
+  }
+  .paper img { width: 100%; height: auto; display: block; border-radius: 6px; filter: var(--pix-filter); }
+  @media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .paper { background: #000; } }
+  :root[data-theme="dark"] .paper { background: #000; }
+  .controls { display: flex; align-items: center; gap: .9rem; margin-bottom: .5rem; }
+  .controls input[type=range] { flex: 1; accent-color: var(--d); min-width: 0; }
+  .epoch-big { font-size: 2.4rem; font-weight: 650; letter-spacing: -0.03em; line-height: 1.1; }
+  .epoch-big small { font-size: 1rem; font-weight: 500; color: var(--ink3); letter-spacing: 0; }
+  .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin: 1rem 0; }
+  .mini { border: 1px solid var(--line); border-radius: 10px; padding: .55rem .75rem; background: var(--wash); }
+  .mini .label { font-size: .8rem; color: var(--ink2); display: flex; align-items: center; gap: .45rem; }
+  .mini .value { font-size: 1.35rem; font-weight: 650; }
+  .caption { color: var(--ink2); border-left: 3px solid var(--line); padding-left: .8rem; min-height: 3.2em; }
+
+  /* ---------- reales vs generados ---------- */
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  .pair figure { margin: 0; }
+  .pair figcaption { margin-top: .6rem; color: var(--ink2); font-size: .9rem; }
+  .pair figcaption strong { color: var(--ink); }
+
+  /* ---------- redes ---------- */
+  .nets { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  .net-head { display: flex; align-items: center; gap: .6rem; margin-bottom: .25rem; }
+  .net-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .net-meta { color: var(--ink2); font-size: .875rem; margin-bottom: .9rem; }
+  .net-meta code { white-space: nowrap; }
+  .layers { list-style: none; margin: 0; padding: 0; }
+  .layer { position: relative; padding: .45rem 0 .45rem .9rem; border-left: 3px solid var(--net); margin-left: 4px; }
+  .layer + .layer { margin-top: 2px; }
+  .layer.act { border-left-color: var(--line); opacity: .9; }
+  .layer .row { display: flex; justify-content: space-between; gap: .75rem; align-items: baseline; }
+  .layer .ltype { font-weight: 600; font-size: .92rem; }
+  .layer.act .ltype { font-weight: 500; color: var(--ink2); }
+  .layer .lshape { color: var(--ink2); font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .layer .lparams { color: var(--ink3); font-size: .8rem; font-variant-numeric: tabular-nums; }
+  .pbar { height: 4px; background: var(--wash); border-radius: 2px; margin-top: .3rem; overflow: hidden; }
+  .pbar i { display: block; height: 100%; background: var(--net); border-radius: 2px; }
+  .net-total { margin-top: .9rem; padding-top: .75rem; border-top: 1px solid var(--line); font-size: .9rem; color: var(--ink2); }
+  .net-total strong { color: var(--ink); font-size: 1.15rem; }
+
+  /* ---------- tablas ---------- */
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .875rem; }
+  th, td { text-align: right; padding: .45rem .7rem; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  th { color: var(--ink2); font-weight: 600; font-size: .8rem; }
+  th:first-child, td:first-child, th.l, td.l { text-align: left; }
+  tbody tr:hover { background: var(--wash); }
+  td .arrow { color: var(--ink3); padding: 0 .25rem; }
+  details { margin-top: 1rem; }
+  summary { cursor: pointer; color: var(--ink2); font-size: .9rem; }
+  summary:hover { color: var(--ink); }
+
+  /* ---------- fórmulas ---------- */
+  .formulas { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  .formula {
+    background: var(--wash); border-radius: 10px; padding: .9rem 1rem;
+    font-size: .95rem; line-height: 1.6; margin: .5rem 0 0; white-space: pre-wrap;
+  }
+  .formula-game { text-align: center; font-size: 1.05rem; margin-bottom: 1.25rem; }
+
+  /* ---------- gráficas ---------- */
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  .card > h3 + .sub { color: var(--ink2); font-size: .875rem; margin: .15rem 0 .5rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: .25rem 1.1rem; font-size: .85rem; color: var(--ink2); margin-bottom: .25rem; }
+  .lg-item { display: inline-flex; align-items: center; gap: .45rem; }
+  .lg-key { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .chart-wrap { position: relative; width: 100%; }
+  .chart-wrap svg { display: block; width: 100%; touch-action: pan-y; }
+  svg .grid { stroke: var(--line); stroke-width: 1; }
+  svg .ref { stroke: var(--ink3); stroke-width: 1; opacity: .7; }
+  svg .tick { fill: var(--ink3); font-size: 11px; font-family: inherit; }
+  svg .endlabel { fill: var(--ink2); font-size: 12px; font-family: inherit; }
+  svg .reflabel { fill: var(--ink3); font-size: 11px; font-family: inherit; }
+  svg .line { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; fill: none; }
+  svg .dot { stroke: var(--surface); stroke-width: 2; }
+  svg .cross { stroke: var(--ink3); stroke-width: 1; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5; min-width: 160px;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 10px; padding: .5rem .7rem; box-shadow: 0 6px 20px rgba(0,0,0,.14); font-size: .82rem;
+  }
+  .tip[hidden] { display: none; }
+  .tip-title { color: var(--ink2); margin-bottom: .3rem; }
+  .tip-row { display: flex; align-items: center; gap: .5rem; line-height: 1.6; }
+  .tip-key { width: 12px; height: 3px; border-radius: 2px; flex: none; }
+  .tip-val { font-weight: 650; font-size: .95rem; font-variant-numeric: tabular-nums; }
+  .tip-lab { color: var(--ink2); }
+  .howto { margin-top: 1.25rem; }
+  .howto ul { margin: .4rem 0 0; padding-left: 1.2rem; color: var(--ink2); }
+  .howto li { margin: .25rem 0; }
+
+  /* ---------- medidores ---------- */
+  .meters { display: grid; gap: 1rem; }
+  .meter .top { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-size: .92rem; }
+  .meter .top b { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+  .track { position: relative; height: 10px; background: color-mix(in srgb, var(--c) 22%, var(--surface)); border-radius: 5px; margin: .45rem 0 .25rem; }
+  .track i { position: absolute; inset: 0 auto 0 0; background: var(--c); border-radius: 5px; }
+  .track .mid { position: absolute; top: -4px; bottom: -4px; left: 50%; width: 2px; background: var(--ink3); border-radius: 1px; }
+  .scale { display: flex; justify-content: space-between; color: var(--ink3); font-size: .75rem; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+
+  ul.plain { margin: .25rem 0 0; padding-left: 1.2rem; color: var(--ink2); }
+  ul.plain li { margin: .4rem 0; }
+  ul.plain strong { color: var(--ink); }
+  pre.cmd { background: var(--wash); border-radius: 10px; padding: .9rem 1rem; overflow-x: auto; font-size: .875rem; line-height: 1.7; margin: .75rem 0 0; }
+  footer { max-width: 1080px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; color: var(--ink3); font-size: .85rem; border-top: 1px solid var(--line); }
+
+  @media (max-width: 860px) {
+    .evo, .pair, .nets, .formulas, .charts, .two { grid-template-columns: 1fr; }
+    .brand { display: none; }
+  }
+  @media print {
+    .topbar, .controls .btn { display: none; }
+    body { background: #fff; }
+    section { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <span class="brand">GAN · Quick, Draw!</span>
+    <nav class="nav" aria-label="Secciones">
+      <a href="#evolucion">Evolución</a>
+      <a href="#reales">Reales vs. generados</a>
+      <a href="#redes">Las dos redes</a>
+      <a href="#perdidas">Pérdidas</a>
+      <a href="#curvas">Curvas</a>
+      <a href="#valores">Valores</a>
+      <a href="#conclusiones">Conclusiones</a>
+    </nav>
+    <button class="btn" id="themeBtn" type="button" aria-label="Cambiar entre tema claro y oscuro">Tema</button>
+  </div>
+</header>
+
+<main>
+  <!-- ============ PORTADA ============ -->
+  <div class="hero">
+    <div class="chip">Categoría usada: <b id="catName">__CATEGORY__</b></div>
+    <h1>Una GAN que aprende a dibujar</h1>
+    <p class="lead">
+      Dos redes neuronales juegan una contra la otra: la <strong>Generadora</strong> inventa dibujos a partir de
+      ruido y la <strong>Discriminadora</strong> intenta descubrir cuáles son falsos. Al competir, ambas mejoran.
+    </p>
+    <div class="stats" id="heroStats"></div>
+    <div class="colorkey" aria-label="Código de colores">
+      <span><i class="sw" style="background:var(--d)"></i>Azul: Discriminadora y dibujos reales</span>
+      <span><i class="sw" style="background:var(--g)"></i>Naranja: Generadora y dibujos falsos</span>
+    </div>
+  </div>
+
+  <!-- ============ EVOLUCIÓN ============ -->
+  <section id="evolucion">
+    <div class="sec-head">
+      <h2>Cómo aprende la Generadora, época a época</h2>
+      <p>Mueve el deslizante o pulsa «Reproducir». Son siempre los mismos 64 vectores de ruido: lo único que cambia es lo que la red ha aprendido.</p>
+    </div>
+    <div class="card evo">
+      <div class="paper"><img id="evoImg" alt="Rejilla de 64 dibujos generados por la GAN"></div>
+      <div>
+        <div class="epoch-big num" aria-live="polite"><span id="epochNum">0</span> <small id="epochOf"></small></div>
+        <div class="controls">
+          <button class="btn" id="playBtn" type="button">▶ Reproducir</button>
+          <input type="range" id="epochSlider" min="0" value="0" step="1" aria-label="Época de entrenamiento">
+        </div>
+        <div class="mini-grid" id="epochMetrics"></div>
+        <p class="caption" id="epochCaption"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REALES VS GENERADOS ============ -->
+  <section id="reales">
+    <div class="sec-head">
+      <h2>Dibujos reales frente a dibujos generados</h2>
+      <p>Categoría <strong class="catInline"></strong>. Uno de los dos lados no existe en el dataset: lo inventó la red.</p>
+    </div>
+    <div class="card pair">
+      <figure>
+        <div class="paper"><img id="realImg" alt="64 dibujos reales de Quick, Draw!"></div>
+        <figcaption><strong>Reales</strong> · muestra del dataset de Quick, Draw!</figcaption>
+      </figure>
+      <figure>
+        <div class="paper"><img id="fakeImg" alt="64 dibujos generados por la GAN"></div>
+        <figcaption><strong>Generados</strong> · salida de la Generadora tras el entrenamiento</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============ REDES ============ -->
+  <section id="redes">
+    <div class="sec-head">
+      <h2>Las dos redes neuronales y sus parámetros</h2>
+      <p>Cada fila es una capa: su tipo, la forma de su salida (canales × alto × ancho) y cuántos parámetros aprende. La barra compara parámetros dentro de cada red.</p>
+    </div>
+    <div class="nets" id="nets"></div>
+
+    <div class="card" style="margin-top:1.25rem">
+      <h3>Valores de los pesos: antes y después de entrenar</h3>
+      <p class="sub" style="color:var(--ink2);font-size:.875rem;margin:.15rem 0 .75rem">
+        Al inicio los pesos son aleatorios (media ≈ 0, desviación ≈ 0,02). Tras entrenar cambian: la red aprendió.
+      </p>
+      <div id="weights"></div>
+    </div>
+  </section>
+
+  <!-- ============ PÉRDIDAS ============ -->
+  <section id="perdidas">
+    <div class="sec-head">
+      <h2>Funciones de pérdida</h2>
+      <p>La GAN es un juego de dos jugadores: lo que una gana, la otra lo pierde.</p>
+    </div>
+    <div class="card">
+      <div class="formula-game"><code>min<sub>G</sub> max<sub>D</sub> V(D,G) = E[ log D(x) ] + E[ log(1 − D(G(z))) ]</code></div>
+      <div class="formulas">
+        <div>
+          <h3><i class="sw" style="background:var(--d);vertical-align:middle;margin-right:.4rem"></i>Discriminadora</h3>
+          <p style="color:var(--ink2);margin:.25rem 0 0">Quiere dar <strong>1</strong> a lo real y <strong>0</strong> a lo falso.</p>
+          <pre class="formula">L_D = −log D(x) − log(1 − D(G(z)))</pre>
+        </div>
+        <div>
+          <h3><i class="sw" style="background:var(--g);vertical-align:middle;margin-right:.4rem"></i>Generadora</h3>
+          <p style="color:var(--ink2);margin:.25rem 0 0">Quiere que D dé <strong>1</strong> a sus dibujos falsos.</p>
+          <pre class="formula">L_G = −log D(G(z))</pre>
+        </div>
+      </div>
+      <h3 style="margin-top:1.5rem">Valores de referencia (calculados con las funciones reales del proyecto)</h3>
+      <div class="tablewrap">
+        <table id="lossRef"><thead><tr><th class="l">Situación</th><th>L_D</th><th>L_G</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CURVAS ============ -->
+  <section id="curvas">
+    <div class="sec-head">
+      <h2>Curvas del entrenamiento</h2>
+      <p>Pasa el cursor (o usa las flechas del teclado tras enfocar la gráfica) para leer los valores exactos.</p>
+    </div>
+    <div class="charts">
+      <div class="card">
+        <h3>Funciones de pérdida</h3>
+        <div class="sub" id="lossSub"></div>
+        <div id="chartLoss"></div>
+      </div>
+      <div class="card">
+        <h3>Lo que opina la Discriminadora</h3>
+        <div class="sub">Probabilidad media de «real» que asigna D, por época</div>
+        <div id="chartProb"></div>
+      </div>
+    </div>
+    <div class="card howto">
+      <h3>Cómo leerlas</h3>
+      <ul id="howto"></ul>
+      <details>
+        <summary>Ver los datos como tabla (una fila por época)</summary>
+        <div class="tablewrap" style="margin-top:.75rem">
+          <table id="epochTable"><thead><tr><th>Época</th><th>Pérdida D</th><th>Pérdida G</th><th>D(x)</th><th>D(G(z))</th></tr></thead><tbody></tbody></table>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ============ VALORES ============ -->
+  <section id="valores">
+    <div class="sec-head">
+      <h2>Valores que producen las redes</h2>
+      <p>Medidos al final del entrenamiento sobre 256 dibujos reales y 256 dibujos generados.</p>
+    </div>
+    <div class="two">
+      <div class="card">
+        <h3>Discriminadora: probabilidad de «real»</h3>
+        <div class="meters" id="meters" style="margin-top:1rem"></div>
+        <p style="color:var(--ink3);font-size:.8rem;margin:1rem 0 0">La marca central es 0,5: la Discriminadora no distingue. 1 = «seguro que es real», 0 = «seguro que es falsa».</p>
+      </div>
+      <div class="card">
+        <h3>Generadora: píxeles producidos</h3>
+        <p style="color:var(--ink2);font-size:.875rem;margin:.15rem 0 .5rem">Los píxeles viven en [−1, 1] (fondo = −1, trazo = +1). Si G acierta, sus estadísticas se parecen a las reales.</p>
+        <div class="tablewrap"><table id="pixTable"><thead><tr><th class="l">Origen</th><th>Media</th><th>Desv.</th><th>Mín</th><th>Máx</th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONCLUSIONES ============ -->
+  <section id="conclusiones">
+    <div class="sec-head"><h2>Conclusiones</h2></div>
+    <div class="card">
+      <ul class="plain">
+        <li><strong>La Generadora aprendió a dibujar</strong> sin ver nunca el dataset directamente: su única guía fue la opinión de la Discriminadora.</li>
+        <li><strong>La Discriminadora hizo de maestra</strong>: cuanto mejor distingue, más exige a la Generadora.</li>
+        <li><strong>Las pérdidas de una GAN no miden la calidad por sí solas.</strong> Oscilan porque las dos redes se persiguen; la calidad se juzga mirando los dibujos.</li>
+        <li><strong>Para otra categoría</strong> solo cambia un parámetro; la arquitectura es la misma.</li>
+      </ul>
+      <h3 style="margin-top:1.25rem">Cómo reproducirlo</h3>
+<pre class="cmd" id="cmd"></pre>
+    </div>
+  </section>
+</main>
+
+<footer id="foot"></footer>
+
+<script id="data" type="application/json">__REPORT_DATA__</script>
+<script>
+(() => {
+  "use strict";
+  const DATA = JSON.parse(document.getElementById("data").textContent);
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;     // siempre textContent: los datos no son HTML
+    return n;
+  };
+  const NF = new Intl.NumberFormat("es", { useGrouping: "always" });   // 1.024 y no 1024
+  const f = (v, d = 3) => Number(v).toFixed(d).replace(".", ",");
+  const cat = DATA.category;
+  const png = (b64) => "data:image/png;base64," + b64;
+  const cfg = DATA.config;
+  const N = DATA.frames.length - 1;                // número de épocas
+
+  /* ---------------- tema claro / oscuro ---------------- */
+  const root = document.documentElement;
+  try { const t = localStorage.getItem("theme"); if (t) root.dataset.theme = t; } catch (e) {}
+  $("themeBtn").addEventListener("click", () => {
+    const dark = getComputedStyle(root).colorScheme === "dark";
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("theme", root.dataset.theme); } catch (e) {}
+  });
+
+  /* ---------------- textos con la categoría ---------------- */
+  $("catName").textContent = cat;
+  document.querySelectorAll(".catInline").forEach((n) => (n.textContent = cat));
+
+  /* ---------------- portada: tarjetas de datos ---------------- */
+  [
+    ["Categoría", cat, "dataset Quick, Draw!"],
+    ["Dibujos de entrenamiento", NF.format(cfg.num_samples), "de " + NF.format(cfg.dataset_total) + " disponibles"],
+    ["Épocas", String(N), NF.format(cfg.n_batches) + " lotes por época"],
+    ["Parámetros de G", NF.format(DATA.networks.G.params), "red Generadora"],
+    ["Parámetros de D", NF.format(DATA.networks.D.params), "red Discriminadora"],
+  ].forEach(([label, value, sub]) => {
+    const t = el("div", "tile");
+    t.append(el("div", "label", label), el("div", "value num", value), el("div", "sub", sub));
+    $("heroStats").append(t);
+  });
+
+  /* ---------------- evolución por épocas ---------------- */
+  const slider = $("epochSlider");
+  slider.max = N;
+  $("epochOf").textContent = "de " + N;
+  const mini = [
+    ["Pérdida D", "d_loss", "var(--d)"],
+    ["Pérdida G", "g_loss", "var(--g)"],
+    ["D(x): real → «real»", "d_real", "var(--d)"],
+    ["D(G(z)): falso → «real»", "d_fake", "var(--g)"],
+  ].map(([label, key, color]) => {
+    const box = el("div", "mini");
+    const lab = el("div", "label");
+    const key_ = el("i", "sw"); key_.style.background = color;
+    lab.append(key_, document.createTextNode(label));
+    const val = el("div", "value num", "—");
+    box.append(lab, val);
+    $("epochMetrics").append(box);
+    return { key, val };
+  });
+  const captions = (e) =>
+    e === 0 ? "Sin entrenar: la Generadora solo produce ruido gris, no hay ningún dibujo todavía."
+    : e <= 3 ? "Aparecen los primeros contornos: la red ya descubrió que una manzana es una forma cerrada y redondeada."
+    : e <= 12 ? "Ya se reconocen manzanas, pero el trazo es irregular y los tallos salen borrosos."
+    : "Contornos limpios, con tallos y hojas más definidos. Cada época pule pequeños detalles.";
+  function showEpoch(e) {
+    $("evoImg").src = png(DATA.frames[e]);
+    $("epochNum").textContent = e;
+    slider.value = e;
+    mini.forEach(({ key, val }) => (val.textContent = e === 0 ? "—" : f(DATA.epochs[key][e - 1])));
+    $("epochCaption").textContent = captions(e);
+  }
+  slider.addEventListener("input", () => { stop(); showEpoch(+slider.value); });
+  let timer = null;
+  function stop() { clearInterval(timer); timer = null; $("playBtn").textContent = "▶ Reproducir"; }
+  $("playBtn").addEventListener("click", () => {
+    if (timer) return stop();
+    if (+slider.value >= N) showEpoch(0);
+    $("playBtn").textContent = "❚❚ Pausa";
+    timer = setInterval(() => {
+      const next = +slider.value + 1;
+      showEpoch(next);
+      if (next >= N) stop();
+    }, 380);
+  });
+  showEpoch(N);
+
+  /* ---------------- reales vs generados ---------------- */
+  $("realImg").src = png(DATA.real_grid);
+  $("fakeImg").src = png(DATA.frames[N]);
+
+  /* ---------------- redes neuronales ---------------- */
+  const ACT = new Set(["ReLU", "LeakyReLU", "Tanh", "Sigmoid", "Dropout"]);
+  [
+    ["G", "Generadora (G)", "var(--g)", "Convierte un vector de ruido de " + cfg.latent_dim + " números en una imagen de 28×28."],
+    ["D", "Discriminadora (D)", "var(--d)", "Recibe una imagen de 28×28 y devuelve un único número: cuánto «parece real»."],
+  ].forEach(([id, title, color, desc]) => {
+    const net = DATA.networks[id];
+    const card = el("div", "card");
+    card.style.setProperty("--net", color);
+    const head = el("div", "net-head");
+    const dot = el("span", "net-dot"); dot.style.background = color;
+    head.append(dot, el("h3", null, title));
+    const meta = el("div", "net-meta");
+    meta.append(document.createTextNode(desc + " Se crea en "));
+    meta.append(el("code", null, net.file + " → " + net.factory + "()"));
+    const list = el("ol", "layers");
+    const maxP = Math.max(...net.layers.map((l) => l.params));
+    net.layers.forEach((l) => {
+      const li = el("li", "layer" + (ACT.has(l.type) ? " act" : ""));
+      const row = el("div", "row");
+      row.append(el("span", "ltype", l.type), el("span", "lshape", l.shape));
+      li.append(row);
+      if (l.params > 0) {
+        const r2 = el("div", "row");
+        r2.append(el("span", "lparams", NF.format(l.params) + " parámetros"));
+        const bar = el("div", "pbar");
+        const fill = el("i"); fill.style.width = Math.max(2, (l.params / maxP) * 100) + "%";
+        bar.append(fill);
+        li.append(r2, bar);
+      }
+      list.append(li);
+    });
+    const total = el("div", "net-total");
+    total.append(document.createTextNode("Total entrenable: "), el("strong", "num", NF.format(net.params)), document.createTextNode(" parámetros"));
+    card.append(head, meta, list, total);
+    $("nets").append(card);
+  });
+
+  /* tabla de pesos antes/después */
+  (function weights() {
+    const wrap = el("div", "tablewrap");
+    const tbl = el("table");
+    tbl.innerHTML = "<thead><tr><th class='l'>Tensor</th><th class='l'>Forma</th><th>Media (antes → después)</th><th>Desv. (antes → después)</th><th>Mín</th><th>Máx</th></tr></thead>";
+    const body = el("tbody");
+    [["G", "Generadora", "var(--g)"], ["D", "Discriminadora", "var(--d)"]].forEach(([id, label, color]) => {
+      const sep = el("tr");
+      const td = el("td", "l"); td.colSpan = 6;
+      const k = el("i", "sw"); k.style.background = color; k.style.marginRight = ".5rem"; k.style.verticalAlign = "middle";
+      td.append(k, el("strong", null, label));
+      sep.append(td); body.append(sep);
+      DATA.networks[id].weights.forEach((w) => {
+        const tr = el("tr");
+        const mk = (txt, cls) => tr.append(el("td", cls || "", txt));
+        mk(w.name, "l"); mk(w.shape, "l");
+        mk(f(w.mean0, 4) + " → " + f(w.mean, 4));
+        mk(f(w.std0, 4) + " → " + f(w.std, 4));
+        mk(f(w.min, 4)); mk(f(w.max, 4));
+        body.append(tr);
+      });
+    });
+    tbl.append(body); wrap.append(tbl); $("weights").append(wrap);
+  })();
+
+  /* ---------------- tabla de referencia de pérdidas ---------------- */
+  DATA.loss_reference.forEach((r) => {
+    const tr = el("tr");
+    tr.append(el("td", "l", r.label), el("td", null, f(r.d)), el("td", null, f(r.g)));
+    $("lossRef").tBodies[0].append(tr);
+  });
+
+  /* ---------------- gráficas de líneas (SVG propio, con cursor y tooltip) ---------------- */
+  const NS = "http://www.w3.org/2000/svg";
+  function lineChart(host, o) {
+    const mk = (tag, attrs, parent) => {
+      const n = document.createElementNS(NS, tag);
+      Object.entries(attrs || {}).forEach(([k, v]) => n.setAttribute(k, v));
+      if (parent) parent.appendChild(n);
+      return n;
+    };
+    const legend = el("div", "legend");
+    o.series.forEach((s) => {
+      const it = el("span", "lg-item"); const k = el("i", "lg-key"); k.style.background = s.color;
+      it.append(k, document.createTextNode(s.label)); legend.append(it);
+    });
+    const wrap = el("div", "chart-wrap");
+    const svg = mk("svg", { tabindex: "0", role: "img", "aria-label": o.aria });
+    const tip = el("div", "tip"); tip.hidden = true;
+    wrap.append(svg, tip); host.append(legend, wrap);
+
+    let g = null, active = null, cross = null, dots = [];
+    const X = (v) => g.l + ((v - o.xmin) / (o.xmax - o.xmin)) * g.w;
+    const Y = (v) => g.t + (1 - v / o.ymax) * g.h;
+
+    function nearest(xv) {
+      let lo = 0, hi = o.x.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; (o.x[mid] < xv ? (lo = mid) : (hi = mid)); }
+      return Math.abs(o.x[lo] - xv) <= Math.abs(o.x[hi] - xv) ? lo : hi;
+    }
+    function hide() { active = null; tip.hidden = true; if (cross) cross.style.display = "none"; dots.forEach((d) => (d.style.display = "none")); }
+    function showAt(i) {
+      active = i;
+      const px = X(o.x[i]);
+      cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.style.display = "";
+      dots.forEach((d, k) => { d.setAttribute("cx", px); d.setAttribute("cy", Y(o.series[k].y[i])); d.style.display = ""; });
+      tip.replaceChildren();
+      tip.append(el("div", "tip-title", o.tipTitle(i)));
+      o.series.forEach((s) => {
+        const row = el("div", "tip-row"); const k = el("i", "tip-key"); k.style.background = s.color;
+        row.append(k, el("span", "tip-val", o.yfmt(s.y[i], true)), el("span", "tip-lab", s.label));
+        tip.append(row);
+      });
+      tip.hidden = false;
+      const W = wrap.clientWidth, tw = tip.offsetWidth;
+      tip.style.left = Math.max(0, Math.min(W - tw, px + 14 > W - tw ? px - tw - 14 : px + 14)) + "px";
+      tip.style.top = g.t + 6 + "px";
+    }
+    function draw() {
+      const W = Math.max(280, wrap.clientWidth), H = o.height || 300, narrow = W < 560;
+      g = { l: 46, r: narrow ? 14 : 112, t: 12, b: 40 };
+      g.w = W - g.l - g.r; g.h = H - g.t - g.b;
+      svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H);
+      svg.replaceChildren();
+      o.yticks.forEach((v) => {
+        mk("line", { x1: g.l, x2: g.l + g.w, y1: Y(v), y2: Y(v), class: "grid" }, svg);
+        mk("text", { x: g.l - 8, y: Y(v) + 4, class: "tick", "text-anchor": "end" }, svg).textContent = o.yfmt(v);
+      });
+      o.xticks.forEach((v) => mk("text", { x: X(v), y: g.t + g.h + 18, class: "tick", "text-anchor": "middle" }, svg).textContent = v);
+      mk("text", { x: g.l + g.w / 2, y: H - 6, class: "tick", "text-anchor": "middle" }, svg).textContent = o.xTitle;
+      if (o.ref) {
+        mk("line", { x1: g.l, x2: g.l + g.w, y1: Y(o.ref.y), y2: Y(o.ref.y), class: "ref" }, svg);
+        mk("text", { x: g.l + 6, y: Y(o.ref.y) - 5, class: "reflabel" }, svg).textContent = o.ref.label;
+      }
+      o.series.forEach((s) => {
+        const d = s.y.map((v, i) => (i ? "L" : "M") + X(o.x[i]).toFixed(1) + " " + Y(v).toFixed(1)).join("");
+        mk("path", { d, class: "line", style: `stroke:${s.color}` }, svg);
+      });
+      o.series.forEach((s) => {   // punto final + etiqueta directa (selectiva: solo el último valor)
+        const i = s.y.length - 1, cx = X(o.x[i]), cy = Y(s.y[i]);
+        mk("circle", { cx, cy, r: 4, class: "dot", style: `fill:${s.color}` }, svg);
+        if (!narrow) {
+          mk("text", { x: cx + 12, y: cy + 4, class: "endlabel" }, svg).textContent = `${o.yfmt(s.y[i])}  ${s.short}`;
+        }
+      });
+      cross = mk("line", { y1: g.t, y2: g.t + g.h, class: "cross" }, svg); cross.style.display = "none";
+      dots = o.series.map((s) => { const d = mk("circle", { r: 4, class: "dot", style: `fill:${s.color}` }, svg); d.style.display = "none"; return d; });
+      mk("rect", { x: g.l, y: g.t, width: g.w, height: g.h, fill: "transparent" }, svg);
+      if (active != null) showAt(active);
+    }
+    const pointer = (e) => {
+      const r = svg.getBoundingClientRect();
+      const x = ((e.clientX - r.left) / r.width) * (svg.viewBox.baseVal.width) ;
+      showAt(nearest(o.xmin + ((x - g.l) / g.w) * (o.xmax - o.xmin)));
+    };
+    svg.addEventListener("pointermove", pointer);
+    svg.addEventListener("pointerdown", pointer);
+    svg.addEventListener("pointerleave", hide);
+    svg.addEventListener("blur", hide);
+    svg.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") return hide();
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const d = e.key === "ArrowRight" ? 1 : -1;
+      showAt(Math.max(0, Math.min(o.x.length - 1, (active == null ? o.x.length - 1 : active) + d)));
+    });
+    new ResizeObserver(() => requestAnimationFrame(draw)).observe(wrap);
+    draw();
+  }
+
+  const niceMax = (m) => { const step = m > 2 ? 0.5 : 0.25; return Math.ceil(m / step) * step; };
+  const ticksTo = (max, step) => { const t = []; for (let v = 0; v <= max + 1e-9; v += step) t.push(+v.toFixed(4)); return t; };
+  const epochTicks = [1, ...Array.from({ length: Math.floor(N / 5) }, (_, i) => (i + 1) * 5)];
+
+  const it = DATA.iter;
+  const lossMax = niceMax(Math.max(...it.g, ...it.d));
+  $("lossSub").textContent = `Pérdida (BCE) en cada lote, suavizada con una media móvil de ${it.window} lotes`;
+  lineChart($("chartLoss"), {
+    aria: "Pérdida de la Discriminadora y de la Generadora durante el entrenamiento",
+    x: it.x, xmin: 0, xmax: N, xticks: [0, ...epochTicks.slice(1)], xTitle: "Época",
+    ymax: lossMax, yticks: ticksTo(lossMax, lossMax > 2 ? 1 : 0.5), yfmt: (v, tip) => f(v, tip ? 3 : (v % 1 ? 1 : 0)),
+    ref: { y: 2 * Math.LN2, label: "L_D en equilibrio = 2·ln 2 ≈ 1,386" },
+    series: [
+      { label: "Pérdida D", short: "D", color: "var(--d)", y: it.d },
+      { label: "Pérdida G", short: "G", color: "var(--g)", y: it.g },
+    ],
+    tipTitle: (i) => "Época " + f(it.x[i], 1),
+  });
+
+  const ep = DATA.epochs, epX = ep.d_real.map((_, i) => i + 1);
+  lineChart($("chartProb"), {
+    aria: "Probabilidad media de real que la Discriminadora asigna a imágenes reales y a imágenes falsas",
+    x: epX, xmin: 1, xmax: N, xticks: epochTicks, xTitle: "Época",
+    ymax: 1, yticks: [0, 0.25, 0.5, 0.75, 1], yfmt: (v, tip) => f(v, tip ? 3 : (v === 0 || v === 1 ? 0 : 2)),
+    ref: { y: 0.5, label: "0,5 = D no distingue" },
+    series: [
+      { label: "D(x): imágenes reales", short: "D(x)", color: "var(--d)", y: ep.d_real },
+      { label: "D(G(z)): imágenes falsas", short: "D(G(z))", color: "var(--g)", y: ep.d_fake },
+    ],
+    tipTitle: (i) => "Época " + epX[i],
+  });
+
+  /* cómo leerlas: frase construida con los datos reales */
+  const last = N - 1;
+  [
+    `En la última época D(x) = ${f(ep.d_real[last], 2)} y D(G(z)) = ${f(ep.d_fake[last], 2)}. Si ambos valieran 0,5, la Discriminadora no distinguiría lo real de lo falso (equilibrio ideal).`,
+    ep.d_real[last] - ep.d_fake[last] > 0.3
+      ? "Aquí la Discriminadora va por delante (distingue bastante bien), pero la Generadora sigue mejorando: la ventaja de D es la que la obliga a aprender."
+      : "Las dos redes están bastante equilibradas: ninguna domina claramente a la otra.",
+    "Las pérdidas oscilan en lugar de bajar siempre: cada red mejora y obliga a la otra a reaccionar. Es el comportamiento normal de una GAN, no un error.",
+    "Una pérdida baja no garantiza buenos dibujos: hay que mirar las imágenes (sección «Cómo aprende la Generadora»).",
+  ].forEach((t) => $("howto").append(el("li", null, t)));
+
+  ep.d_loss.forEach((_, i) => {
+    const tr = el("tr");
+    tr.append(el("td", null, String(i + 1)), el("td", null, f(ep.d_loss[i])), el("td", null, f(ep.g_loss[i])), el("td", null, f(ep.d_real[i])), el("td", null, f(ep.d_fake[i])));
+    $("epochTable").tBodies[0].append(tr);
+  });
+
+  /* ---------------- valores de salida ---------------- */
+  const out = DATA.outputs;
+  [["D(x): ante dibujos REALES", out.d_real, "var(--d)"], ["D(G(z)): ante dibujos FALSOS", out.d_fake, "var(--g)"]].forEach(([label, v, color]) => {
+    const m = el("div", "meter"); m.style.setProperty("--c", color);
+    const top = el("div", "top"); top.append(el("span", null, label), el("b", null, f(v, 3)));
+    const track = el("div", "track");
+    const fill = el("i"); fill.style.width = (v * 100).toFixed(1) + "%";
+    track.append(fill, el("span", "mid"));
+    const scale = el("div", "scale"); scale.append(el("span", null, "0"), el("span", null, "0,5"), el("span", null, "1"));
+    m.append(top, track, scale); $("meters").append(m);
+  });
+  [["Generados por G", out.fake_mean, out.fake_std, out.fake_min, out.fake_max],
+   ["Reales", out.real_mean, out.real_std, out.real_min, out.real_max]].forEach((r) => {
+    const tr = el("tr"); tr.append(el("td", "l", r[0]), ...r.slice(1).map((v) => el("td", null, f(v, 3))));
+    $("pixTable").tBodies[0].append(tr);
+  });
+
+  /* ---------------- reproducir + pie ---------------- */
+  const cmds = [
+    [`python -m src.train --category ${cat}`, "descarga la categoría y entrena"],
+    ["python -m src.utils.inspect_models", "muestra capas, parámetros y valores"],
+    [`python -m src.report.build_report --category ${cat}`, "vuelve a generar este informe"],
+  ];
+  const w = Math.max(...cmds.map((c) => c[0].length)) + 3;
+  $("cmd").textContent = cmds.map(([c, d]) => c.padEnd(w) + "# " + d).join("\n");
+  $("foot").textContent = `Informe generado el ${DATA.generated_on} · Dispositivo: ${DATA.device} · Categoría ${cat} · ${cfg.epochs} épocas, lote de ${cfg.batch_size}, lr ${cfg.lr}, semilla ${cfg.seed}.`;
+})();
+</script>
+</body>
+</html>

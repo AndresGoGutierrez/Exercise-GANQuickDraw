@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+# Permite hacer "from src.xxx import ..." dentro de los tests.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# E/F: errores y pyflakes | I: orden de imports | B: bugs comunes | UP: sintaxis moderna
+select = ["E", "F", "I", "B", "UP"]

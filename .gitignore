@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Datos descargados (son grandes y se pueden volver a descargar).
+# La "/" inicial limita la regla a la carpeta data/ de la raíz: sin ella también
+# se ignoraría el código fuente de src/data/.
+/data/
+
+# Resultados generados por el entrenamiento
+outputs/*/samples/
+outputs/*/checkpoint.pt
+outputs/*/history.json
+
+# IDE / sistema
+.vscode/
+.idea/
+.DS_Store
