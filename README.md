@@ -1,4 +1,4 @@
-# GAN con Quick, Draw! — Categoría: **apple** 🍎
+# GAN con Quick, Draw! — Categoría: **apple**
 
 Taller para entender cómo funciona una **GAN** (Red Generativa Antagónica) con **dos redes neuronales**:
 
